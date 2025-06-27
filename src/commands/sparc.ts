@@ -6,6 +6,7 @@
 import chalk from 'chalk';
 import ora from 'ora';
 import fs from 'fs-extra';
+import path from 'path';
 import { GeminiClient } from '../core/gemini-client';
 import { AgentMode } from '../types';
 
@@ -40,18 +41,16 @@ export class SparcCommand {
 
     try {
       const apiKey = process.env.GEMINI_API_KEY;
-      if (!apiKey) {
-        throw new Error('GEMINI_API_KEY environment variable is required');
-      }
-
-      const client = new GeminiClient({ apiKey });
+      const client = new GeminiClient({ 
+        apiKey,
+        authMethod: apiKey ? 'api-key' : 'google-account'
+      });
       const prompt = this.buildSparcPrompt(mode as AgentMode, task);
 
       let result: string;
 
       if (options.file) {
         // Validate and sanitize file path to prevent directory traversal
-        const path = require('path');
         const resolvedPath = path.resolve(options.file);
         const workingDir = process.cwd();
         

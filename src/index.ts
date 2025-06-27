@@ -18,4 +18,5 @@ export { Logger } from './utils/logger';
 export * from './types';
 
 // Version
-export const version = require('../package.json').version;
+import packageJson from '../package.json';
+export const version = packageJson.version;

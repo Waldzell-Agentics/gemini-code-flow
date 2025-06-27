@@ -12,7 +12,9 @@ import { SparcCommand } from './commands/sparc';
 import { InitCommand } from './commands/init';
 import { AgentCommand } from './commands/agent';
 import { StatusCommand } from './commands/status';
-const packageJson = require('../package.json');
+import fs from 'fs';
+import path from 'path';
+import packageJson from '../package.json';
 const version = packageJson.version;
 
 const program = new Command();
@@ -86,8 +88,6 @@ program
       let config = {};
       if (options.config) {
         try {
-          const fs = require('fs');
-          const path = require('path');
           
           // Validate config file path to prevent directory traversal
           const resolvedConfigPath = path.resolve(options.config);
