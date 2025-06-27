@@ -163,25 +163,31 @@ export class MemoryManager {
       // Sort by timestamp (oldest first)
       allEntries.sort((a, b) => a.entry.timestamp.getTime() - b.entry.timestamp.getTime());
       
-      // Remove oldest entries - track removed entries to adjust indices
+      // Remove oldest entries by collecting them first, then removing in reverse order
       const toRemove = Math.min(allEntries.length, totalEntries - this.maxEntries);
-      const removedByKey = new Map<string, number>();
+      const entriesToRemove = allEntries.slice(0, toRemove);
       
-      for (let i = 0; i < toRemove; i++) {
-        const { key, index } = allEntries[i];
+      // Group by key to handle removals efficiently
+      const removalsByKey = new Map<string, number[]>();
+      entriesToRemove.forEach(({ key, index }) => {
+        const indices = removalsByKey.get(key) || [];
+        indices.push(index);
+        removalsByKey.set(key, indices);
+      });
+      
+      // Remove entries in reverse order to maintain correct indices
+      for (const [key, indices] of removalsByKey.entries()) {
         const entries = this.cache.get(key);
         if (entries) {
-          // Calculate adjusted index based on previous removals
-          const removedCount = removedByKey.get(key) || 0;
-          const adjustedIndex = Math.max(0, index - removedCount);
-          
-          if (adjustedIndex < entries.length) {
-            entries.splice(adjustedIndex, 1);
-            removedByKey.set(key, removedCount + 1);
-            
-            if (entries.length === 0) {
-              this.cache.delete(key);
+          // Sort indices in descending order and remove
+          indices.sort((a, b) => b - a).forEach(index => {
+            if (index < entries.length) {
+              entries.splice(index, 1);
             }
+          });
+          
+          if (entries.length === 0) {
+            this.cache.delete(key);
           }
         }
       }

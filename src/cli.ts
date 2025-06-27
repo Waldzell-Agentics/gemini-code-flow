@@ -15,6 +15,9 @@ import { StatusCommand } from './commands/status';
 import fs from 'fs';
 import path from 'path';
 import packageJson from '../package.json';
+import { Validator, ValidationError } from './utils/validation';
+import { PathSecurity, PathSecurityError } from './utils/path-security';
+import { ErrorHandler } from './utils/error-handler';
 const version = packageJson.version;
 
 const program = new Command();
@@ -88,21 +91,33 @@ program
       let config = {};
       if (options.config) {
         try {
+          // Use secure path validation
+          const resolvedConfigPath = await PathSecurity.resolveSafePath(
+            options.config,
+            process.cwd(),
+            {
+              mustExist: true,
+              allowedExtensions: ['.json'],
+              requireReadable: true
+            }
+          );
           
-          // Validate config file path to prevent directory traversal
-          const resolvedConfigPath = path.resolve(options.config);
-          const workingDir = process.cwd();
+          const configContent = await fs.readFileSync(resolvedConfigPath, 'utf8');
+          const rawConfig = JSON.parse(configContent);
           
-          if (!resolvedConfigPath.startsWith(workingDir)) {
-            console.warn(chalk.yellow(`⚠ Config file must be within working directory, using defaults`));
-          } else if (fs.existsSync(resolvedConfigPath)) {
-            const configContent = fs.readFileSync(resolvedConfigPath, 'utf8');
-            config = JSON.parse(configContent);
-          } else {
-            console.warn(chalk.yellow(`⚠ Config file not found: ${options.config}, using defaults`));
-          }
+          // Validate configuration
+          config = Validator.validateConfig(rawConfig);
+          
         } catch (configError) {
-          console.warn(chalk.yellow(`⚠ Error loading config: ${configError instanceof Error ? configError.message : 'Unknown error'}, using defaults`));
+          if (configError instanceof PathSecurityError) {
+            console.warn(chalk.yellow(`⚠ Config path security error: ${configError.message}, using defaults`));
+          } else if (configError instanceof ValidationError) {
+            console.warn(chalk.yellow(`⚠ Config validation error: ${configError.message}, using defaults`));
+          } else if (configError instanceof SyntaxError) {
+            console.warn(chalk.yellow(`⚠ Config file invalid JSON: ${options.config}, using defaults`));
+          } else {
+            console.warn(chalk.yellow(`⚠ Error loading config: ${ErrorHandler.formatError(configError)}, using defaults`));
+          }
         }
       }
       

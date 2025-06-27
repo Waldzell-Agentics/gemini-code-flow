@@ -14,6 +14,9 @@ export { AgentCommand } from './commands/agent';
 export { StatusCommand } from './commands/status';
 
 export { Logger } from './utils/logger';
+export { ErrorHandler } from './utils/error-handler';
+export { Validator, ValidationError } from './utils/validation';
+export { PathSecurity, PathSecurityError } from './utils/path-security';
 
 export * from './types';
 

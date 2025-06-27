@@ -9,6 +9,8 @@ import { GeminiClient } from './gemini-client';
 import { MemoryManager } from './memory-manager';
 import { TaskQueue } from './task-queue';
 import { Logger } from '../utils/logger';
+import { ErrorHandler } from '../utils/error-handler';
+import { Validator, ValidationError } from '../utils/validation';
 
 export class Orchestrator extends EventEmitter {
   private agents: Map<string, Agent> = new Map();
@@ -87,21 +89,41 @@ export class Orchestrator extends EventEmitter {
    * Add a task to the queue
    */
   async addTask(task: Task): Promise<void> {
-    // Validate task before adding
-    if (!task.description || task.description.trim().length === 0) {
-      throw new Error('Task description cannot be empty');
-    }
-    
-    if (!task.mode) {
-      throw new Error('Task mode is required');
-    }
-    
-    this.taskQueue.add(task);
-    this.emit('taskAdded', task);
-    
-    // Wake up the processor if idle
-    if (this.isRunning && !this.processingTasks) {
-      this.processTaskQueue();
+    try {
+      // Validate task before adding using validation utility
+      if (!task.description) {
+        throw new ValidationError('Task description is required', 'description');
+      }
+      
+      if (!task.mode) {
+        throw new ValidationError('Task mode is required', 'mode');
+      }
+      
+      // Validate task description and mode
+      const validatedDescription = Validator.validateTaskDescription(task.description);
+      const validatedMode = Validator.validateAgentMode(task.mode);
+      
+      // Create validated task
+      const validatedTask: Task = {
+        ...task,
+        description: validatedDescription,
+        mode: validatedMode,
+        dependencies: task.dependencies || [],
+        createdAt: task.createdAt || new Date(),
+        updatedAt: task.updatedAt || new Date()
+      };
+      
+      this.taskQueue.add(validatedTask);
+      this.emit('taskAdded', validatedTask);
+      
+      // Wake up the processor if idle
+      if (this.isRunning && !this.processingTasks) {
+        this.processTaskQueue();
+      }
+    } catch (error) {
+      const wrappedError = ErrorHandler.wrapError(error, 'Failed to add task to queue', 'addTask');
+      this.logger.error('Task validation failed:', ErrorHandler.formatError(error));
+      throw wrappedError;
     }
   }
 
@@ -154,9 +176,24 @@ export class Orchestrator extends EventEmitter {
         // Spawn agent for the task
         await this.spawnAgent(task);
       } catch (error) {
-        this.logger.error('Error in task processing loop:', error instanceof Error ? error.message : 'Unknown error');
-        // Wait before continuing to prevent tight error loops
-        await new Promise(resolve => setTimeout(resolve, 5000));
+        // Categorize error types for better handling
+        if (ErrorHandler.isNetworkError(error)) {
+          this.logger.warn('Network error in task processing, retrying in 10 seconds:', ErrorHandler.formatError(error));
+          await new Promise(resolve => setTimeout(resolve, 10000));
+        } else if (ErrorHandler.isRateLimitError(error)) {
+          this.logger.warn('Rate limit hit, waiting 30 seconds:', ErrorHandler.formatError(error));
+          await new Promise(resolve => setTimeout(resolve, 30000));
+        } else if (ErrorHandler.isAuthError(error)) {
+          this.logger.error('Authentication error in task processing:', ErrorHandler.formatError(error));
+          // Stop processing on auth errors
+          this.isRunning = false;
+          this.emit('authError', error);
+          break;
+        } else {
+          this.logger.error('Unexpected error in task processing loop:', ErrorHandler.formatError(error));
+          // Wait before continuing to prevent tight error loops
+          await new Promise(resolve => setTimeout(resolve, 5000));
+        }
       }
     }
     } finally {

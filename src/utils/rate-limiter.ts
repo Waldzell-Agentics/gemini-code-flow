@@ -13,6 +13,8 @@ export interface RateLimiterConfig {
 export class RateLimiter {
   private requests: number[] = [];
   private config: Required<RateLimiterConfig>;
+  private lastCleanup: number = 0;
+  private readonly cleanupInterval: number = 10000; // Cleanup every 10 seconds
 
   constructor(config: RateLimiterConfig) {
     this.config = {
@@ -29,10 +31,16 @@ export class RateLimiter {
   async checkLimit(): Promise<void> {
     const now = Date.now();
     
-    // Remove old requests outside the window
-    this.requests = this.requests.filter(
-      timestamp => now - timestamp < this.config.windowMs
-    );
+    // Optimize cleanup - only clean if enough time has passed
+    if (now - this.lastCleanup > this.cleanupInterval) {
+      this.cleanupOldRequests(now);
+      this.lastCleanup = now;
+    } else {
+      // Quick cleanup of obviously old requests
+      while (this.requests.length > 0 && now - this.requests[0] >= this.config.windowMs) {
+        this.requests.shift();
+      }
+    }
 
     // Check if we're at the limit
     if (this.requests.length >= this.config.maxRequests) {
@@ -49,6 +57,28 @@ export class RateLimiter {
 
     // Add current request
     this.requests.push(now);
+  }
+
+  /**
+   * Clean up old requests efficiently
+   */
+  private cleanupOldRequests(now: number): void {
+    const cutoff = now - this.config.windowMs;
+    let removeCount = 0;
+    
+    // Count how many to remove from the start
+    for (let i = 0; i < this.requests.length; i++) {
+      if (this.requests[i] < cutoff) {
+        removeCount++;
+      } else {
+        break;
+      }
+    }
+    
+    // Remove in one operation
+    if (removeCount > 0) {
+      this.requests.splice(0, removeCount);
+    }
   }
 
   /**
