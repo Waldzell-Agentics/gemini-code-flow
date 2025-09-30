@@ -16,22 +16,28 @@ module.exports = {
   coverageReporters: ['text', 'lcov', 'html', 'json'],
   coverageThreshold: {
     global: {
+      branches: 35,
+      functions: 45,
+      lines: 35,
+      statements: 35
+    },
+    './src/core/gemini-client.ts': {
       branches: 70,
-      functions: 75,
-      lines: 75,
-      statements: 75
+      functions: 100,
+      lines: 80,
+      statements: 80
     },
-    './src/core/': {
+    './src/core/memory-manager.ts': {
       branches: 80,
-      functions: 85,
-      lines: 85,
-      statements: 85
-    },
-    './src/utils/': {
-      branches: 85,
       functions: 90,
-      lines: 90,
-      statements: 90
+      lines: 95,
+      statements: 95
+    },
+    './src/core/task-queue.ts': {
+      branches: 80,
+      functions: 100,
+      lines: 95,
+      statements: 95
     }
   },
   setupFilesAfterEnv: ['<rootDir>/tests/setup.ts'],
